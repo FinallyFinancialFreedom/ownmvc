@@ -4,7 +4,6 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.reflect.ClassPath;
 import com.home.mvc.annotation.Nullable;
 import com.home.mvc.exception.TunningException;
-import com.home.mvc.util.ReflectCache;
 import com.home.mvc.util.View;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -19,7 +18,6 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -33,7 +31,7 @@ public class DispatcherServlet extends HttpServlet{
     private Map<String, Class> clazzes = new ConcurrentHashMap<>(128);//map webServlet's urlPattern to controllerClass
     private Map<String, Object> instances = new ConcurrentHashMap<>(128);//map classSimpleName to instance.
     private Map<String,Method> methods = new ConcurrentHashMap<>(256);//map className#methodName to method.
-    private Map<Class, ReflectCache> cacheFieldandMethod = new ConcurrentHashMap<>(128);
+    private Map<Class, Field[]> cacheFields = new ConcurrentHashMap<>(128);//form fields cache
 
     public DispatcherServlet() {
         super();
@@ -257,13 +255,12 @@ public class DispatcherServlet extends HttpServlet{
      * @throws Exception if the neccessary request value is null or value datatype is wrong.
      */
     private  <T> T parseRequest(HttpServletRequest request, Class<T> tClass) throws Exception {
-        ReflectCache reflectCache = cacheFieldandMethod.get(tClass);
-        if (reflectCache == null) {
-            reflectCache = new ReflectCache();
-            return parseRequestNoCache(request, tClass,reflectCache);
+        Field[] fields = cacheFields.get(tClass);
+        if (fields == null) {
+            return parseRequestNoCache(request, tClass);
         } else {
             T instance = tClass.newInstance();
-            return parseRequestFromCache(request,instance,reflectCache);
+            return parseRequestFromCache(request,instance,fields);
         }
     }
     /**
@@ -272,11 +269,9 @@ public class DispatcherServlet extends HttpServlet{
      * @return the T object instantiate by request value.
      * @throws Exception while not null param is null or datatype is wrong.
      */
-    private   <T> T parseRequestFromCache(HttpServletRequest request, T instance,ReflectCache reflectCache) throws Exception {
-        Field[] fields = reflectCache.getFields();
+    private   <T> T parseRequestFromCache(HttpServletRequest request, T instance,Field[] fields) throws Exception {
         for (Field f : fields) {
-            Method method = reflectCache.getMethods().get(f);
-            invokeObj(method, instance, request, f);
+            invokeObj(instance, request, f);
         }
         return instance;
     }
@@ -288,27 +283,21 @@ public class DispatcherServlet extends HttpServlet{
      * @return the T object instantiate by request value.
      * @throws Exception while not null param is null or datatype is wrong.
      */
-    private <T> T parseRequestNoCache(HttpServletRequest request, Class<T> tClass,ReflectCache reflectCache) throws Exception {
+    private <T> T parseRequestNoCache(HttpServletRequest request, Class<T> tClass) throws Exception {
         T instance = tClass.newInstance();
         Field[] fields = tClass.getDeclaredFields();
-        reflectCache.setFields(fields);
-        Map<Field,Method> methods = new HashMap<>();
         for (Field f : fields) {
-            String fieldName = f.getName();
-            Method method = tClass.getMethod(createSetMethodName(fieldName), f.getType());
-            methods.put(f, method);
-            invokeObj(method, instance, request, f);
+            invokeObj(instance, request, f);
         }
-        reflectCache.setMethods(methods);
-        cacheFieldandMethod.put(tClass, reflectCache);
+        cacheFields.put(tClass, fields);
         return instance;
     }
 
-    private <T> void invokeObj(Method method, T instance,HttpServletRequest request,Field f) throws Exception {
+    private <T> void invokeObj(T instance,HttpServletRequest request,Field f) throws Exception {
         String fieldName = f.getName();
         final boolean isNullable = f.isAnnotationPresent(Nullable.class);
         String value = request.getParameter(f.getName());
-        if (value == null) {
+        if (StringUtils.isBlank(value)) {
             if (isNullable) {
                 return;
             } else {
@@ -317,35 +306,36 @@ public class DispatcherServlet extends HttpServlet{
         }
         value = value.trim();
         Class<?> fieldType = f.getType();
+        f.setAccessible(true);
         if (fieldType.isPrimitive()) {
             fieldType = getBoxClass(fieldType.getName());
         }
         if (fieldType == String.class) {
-            method.invoke(instance, value);
+            f.set(instance,value);
         } else if (fieldType == Integer.class) {
-            method.invoke(instance, Integer.valueOf(value));
+            f.setInt(instance,Integer.parseInt(value));
         } else if (fieldType == Long.class) {
-            method.invoke(instance, Long.valueOf(value));
+            f.setLong(instance,Long.parseLong(value));
         } else if (fieldType == Double.class) {
-            method.invoke(instance, Double.valueOf(value));
+            f.setDouble(instance, Double.parseDouble(value));
         } else if (fieldType == Float.class) {
-            method.invoke(instance, Float.valueOf(value));
+            f.setFloat(instance, Float.parseFloat(value));
         } else if (fieldType == Boolean.class) {
-            method.invoke(instance, Boolean.valueOf(value));
+            f.setBoolean(instance, Boolean.parseBoolean(value));
         } else if (fieldType == Short.class) {
-            method.invoke(instance, Short.valueOf(value));
+            f.setShort(instance, Short.parseShort(value));
         } else if (fieldType == Character.class) {
-            method.invoke(instance, value.charAt(0));
+            f.setChar(instance, value.charAt(0));
         } else if (fieldType == Byte.class) {
-            method.invoke(instance, Byte.valueOf(value));
+            f.setByte(instance, Byte.parseByte(value));
         }
     }
 
-    /**
-     * 首字母大写加set
-     */
-    private static String createSetMethodName(String fieldName) {
-        return "set"+Character.toUpperCase(fieldName.charAt(0))+fieldName.substring(1);
-    }
+//    /**
+//     * 首字母大写加set
+//     */
+//    private static String createSetMethodName(String fieldName) {
+//        return "set"+Character.toUpperCase(fieldName.charAt(0))+fieldName.substring(1);
+//    }
 	
 }

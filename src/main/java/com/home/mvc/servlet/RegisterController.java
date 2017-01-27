@@ -1,7 +1,9 @@
 package com.home.mvc.servlet;
 
 import com.home.mvc.common.form.User;
+import com.home.service.UserService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import javax.servlet.annotation.WebServlet;
 
@@ -13,6 +15,8 @@ import javax.servlet.annotation.WebServlet;
 @Slf4j
 @WebServlet(urlPatterns = {"/reg/"})
 public class RegisterController {
+    @Autowired
+    private UserService userService;
 
     public String add(String tel,int age) {
         return tel+"--"+(++age);
@@ -23,7 +27,6 @@ public class RegisterController {
     }
 
     public String modify(User user) {
-        System.out.println(user.getAge());
         return user.getName()+"--"+user.getTel()+"--"+(user.getAge()+1);
     }
 }
