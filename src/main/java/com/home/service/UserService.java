@@ -1,6 +1,7 @@
 package com.home.service;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
@@ -12,7 +13,10 @@ import org.springframework.stereotype.Service;
 @Service
 public class UserService {
 
+    @Autowired
+    private BillService billService;
+
     public void regUser(String name) {
-        log.info("save ok "+name);
+        log.info("save ok "+billService.getBill(name));
     }
 }

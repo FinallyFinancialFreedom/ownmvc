@@ -15,11 +15,17 @@ import javax.servlet.annotation.WebServlet;
 @Slf4j
 @WebServlet(urlPatterns = {"/reg/"})
 public class RegisterController {
+
     @Autowired
     private UserService userService;
 
     public String add(String tel,int age) {
         return tel+"--"+(++age);
+    }
+
+    public String reg(String name) {
+        userService.regUser(name);
+        return "success";
     }
 
     public int hehe(int age) {

@@ -7,6 +7,9 @@ import com.home.mvc.exception.TunningException;
 import com.home.mvc.util.View;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.context.WebApplicationContext;
+import org.springframework.web.context.support.WebApplicationContextUtils;
 
 import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServlet;
@@ -26,7 +29,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  */
 @Slf4j
-public class DispatcherServlet extends HttpServlet{
+public class DispatcherServlet extends HttpServlet {
 
     private Map<String, Class> clazzes = new ConcurrentHashMap<>(128);//map webServlet's urlPattern to controllerClass
     private Map<String, Object> instances = new ConcurrentHashMap<>(128);//map classSimpleName to instance.
@@ -93,6 +96,16 @@ public class DispatcherServlet extends HttpServlet{
         Object controllerInstance=instances.get(controller.getSimpleName());
         if (controllerInstance==null) {
             controllerInstance = controller.newInstance();
+            final Field[] fields = controller.getDeclaredFields();//we need spring bean.
+            final WebApplicationContext webApplicationContext = WebApplicationContextUtils.getWebApplicationContext(getServletContext());
+            for (Field field : fields) {
+                if (field.isAnnotationPresent(Autowired.class)) {//by type
+//                    get spring beans.
+                    final Object bean = webApplicationContext.getBean(field.getType());
+                    field.setAccessible(true);
+                    field.set(controllerInstance,bean);
+                }
+            }
             instances.put(controller.getSimpleName(), controllerInstance);
         }
         return controllerInstance;
@@ -330,6 +343,7 @@ public class DispatcherServlet extends HttpServlet{
             f.setByte(instance, Byte.parseByte(value));
         }
     }
+
 
 //    /**
 //     * Ê××ÖÄ¸´óÐ´¼Óset
