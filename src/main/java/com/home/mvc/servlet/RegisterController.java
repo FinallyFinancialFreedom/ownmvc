@@ -26,15 +26,18 @@ public class RegisterController {
         return tel+"--"+(++age);
     }
 
+    @Path(value = "reg")
     public String reg(String name) {
         userService.regUser(name);
         return "success";
     }
 
+    @Path(value = "hehe")
     public int hehe(int age) {
         return age;
     }
 
+    @Path(value = "modify")
     public String modify(User user) {
         return user.getName()+"--"+user.getTel()+"--"+(user.getAge()+1);
     }

@@ -14,7 +14,8 @@ import org.springframework.web.context.support.WebApplicationContextUtils;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import javax.ws.rs.*;
+import javax.ws.rs.HttpMethod;
+import javax.ws.rs.Path;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.lang.annotation.Annotation;
@@ -32,9 +33,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class DispatcherServlet extends HttpServlet {
 
-    private Map<String, Class> clazzes = new ConcurrentHashMap<>(128);//map webServlet's urlPattern to controllerClass
     private Map<String, Object> instances = new ConcurrentHashMap<>(128);//map classSimpleName to instance.
-    private Map<String,Method> methods = new ConcurrentHashMap<>(256);//map className#methodName to method.
+    private Map<String, Method> urlToMethod = new ConcurrentHashMap<>(256);//map url to Class and method.
     private Map<Class, Field[]> cacheFields = new ConcurrentHashMap<>(128);//form fields cache
 
     public DispatcherServlet() {
@@ -48,8 +48,14 @@ public class DispatcherServlet extends HttpServlet {
                     .forAnnotations(Path.class).collect(Cursor::getType);
             for (Class<?> controllerClass : controllerClasses) {
                 final Path path = controllerClass.getAnnotation(Path.class);
-                log.debug("mapping url {} to controller {}", path.value(), controllerClass.getSimpleName());
-                clazzes.put(path.value(), controllerClass);
+                Method[] dealMethods = controllerClass.getMethods();
+                for (Method dealMethod : dealMethods) {
+                    if (dealMethod.isAnnotationPresent(Path.class)) {
+                        Path methodPath = dealMethod.getAnnotation(Path.class);
+                        urlToMethod.put(path.value() + methodPath.value(), dealMethod);
+                        log.debug("mapping url {} to controller {}#{}", path.value() + methodPath.value(), controllerClass.getSimpleName(), dealMethod.getName());
+                    }
+                }
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -62,18 +68,30 @@ public class DispatcherServlet extends HttpServlet {
 
 	public void doPost(HttpServletRequest req,HttpServletResponse resp){
         String uri = req.getRequestURI();
-        final String[] controllerUriAndMethod = splitStruct(uri);
-        final Class controller = clazzes.get(controllerUriAndMethod[0]);
-        Method method = getMethod(controllerUriAndMethod[1], controller,req.getMethod());
-		if(method==null){
+        Method method = urlToMethod.get(uri);
+
+        if (method == null) {
             getPrint(resp).print(uri+" is not find!");
+            return;
+        }
+
+        //if the method requires HttpMethod constraint,then check it,otherwise don't check HttpMethod.
+        boolean restMethodForbid = false;
+        final Annotation[] annotations = method.getAnnotations();
+        for (Annotation annotation : annotations) {
+            if (annotation.annotationType().isAnnotationPresent(HttpMethod.class)) {
+                restMethodForbid = !annotation.getClass().getSimpleName().equals(req.getMethod());
+            }
+        }
+        if (restMethodForbid) {
+            getPrint(resp).print(uri + " Request Method is wrong!");
             return;
         }
 
 		try {
             Object[] args = getArgumentsJDK8(req,method);
-			Object result = method.invoke(getInstance(controller), args);
-			if(result instanceof View){//to some jsp display
+            Object result = method.invoke(getInstance(method.getDeclaringClass()), args);
+            if(result instanceof View){//to some jsp display
 				req.getRequestDispatcher(result.toString()).forward(req, resp);
 //				resp.sendRedirect(result.toString());
 			}else{//pattern Result or String, Result.toString is invoked by default;
@@ -96,7 +114,7 @@ public class DispatcherServlet extends HttpServlet {
             final WebApplicationContext webApplicationContext = WebApplicationContextUtils.getWebApplicationContext(getServletContext());
             for (Field field : fields) {
                 if (field.isAnnotationPresent(Autowired.class)) {//by type
-//                    get spring beans.
+                    //get spring beans.
                     final Object bean = webApplicationContext.getBean(field.getType());
                     field.setAccessible(true);
                     field.set(controllerInstance,bean);
@@ -106,28 +124,6 @@ public class DispatcherServlet extends HttpServlet {
         }
         return controllerInstance;
     }
-
-    /**
-     * split uri
-     * @return string[0] is urlpattern point to a Controller,string[1] is the method.
-     */
-    private static String[] splitStruct(String url) {
-        String[] controllerAndMethod = {"/",""};
-        String noEndSlash=url;
-        if (url.endsWith("/")) {
-            noEndSlash = StringUtils.chop(url);
-        }
-        String[] parts = noEndSlash.split("/");
-        for(int i=1;i<parts.length;i++) {
-            if (i<parts.length-1) {
-                controllerAndMethod[0] += parts[i] + "/";
-            }else {
-                controllerAndMethod[1] = parts[i];
-            }
-        }
-        return controllerAndMethod;
-    }
-
 
     protected PrintWriter getPrint(HttpServletResponse resp){
 		try {
@@ -234,41 +230,6 @@ public class DispatcherServlet extends HttpServlet {
 //		return args;
 //	}
 
-	/**
-     * no need to synchronized like struts1
-	 */
-	private Method getMethod(String methodName,Class clazz,String httpMethod) {
-        String methodKey = clazz.getSimpleName()+"#"+methodName;
-        Method m = methods.get(methodKey);
-        if(m==null){
-            Method[] all= clazz.getMethods();
-            for(Method mx :all){
-                mx.isAnnotationPresent(getAnnoFromRequestMethod(httpMethod));
-                if(mx.getName().equals(methodName)){
-                    m = mx;
-                }
-            }
-            if (m!=null) {
-                methods.put(methodKey, m);
-            }
-        }
-        return m;
-	}
-
-    private Class<? extends Annotation> getAnnoFromRequestMethod(String httpMethod) {
-        Class<? extends Annotation> methodAnno;
-        switch (httpMethod) {
-            case HttpMethod.GET:methodAnno = GET.class;break;
-            case HttpMethod.POST:methodAnno = POST.class;break;
-            case HttpMethod.DELETE:methodAnno = DELETE.class;break;
-            case HttpMethod.PUT:methodAnno= PUT.class;break;
-            case HttpMethod.HEAD:methodAnno= HEAD.class;break;
-            case HttpMethod.OPTIONS:methodAnno= OPTIONS.class;break;
-            default:methodAnno=GET.class;break;
-        }
-        return methodAnno;
-    }
-
     /**
      * @param request request
      * @param tClass form class
@@ -352,7 +313,6 @@ public class DispatcherServlet extends HttpServlet {
             f.setByte(instance, Byte.parseByte(value));
         }
     }
-
 
 //    /**
 //     */
