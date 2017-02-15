@@ -1,10 +1,10 @@
 package com.home.mvc.servlet;
 
-import com.google.common.collect.ImmutableSet;
-import com.google.common.reflect.ClassPath;
 import com.home.mvc.annotation.Nullable;
 import com.home.mvc.exception.TunningException;
 import com.home.mvc.util.View;
+import eu.infomas.annotation.AnnotationDetector;
+import eu.infomas.annotation.Cursor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +21,7 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -43,18 +44,15 @@ public class DispatcherServlet extends HttpServlet {
     @Override
     public void init() {
         try {
-            ClassPath classPath = ClassPath.from(DispatcherServlet.class.getClassLoader());
-            final ImmutableSet<ClassPath.ClassInfo> controllers = classPath.getTopLevelClassesRecursive("com.home.mvc.servlet");
-            for (ClassPath.ClassInfo controller : controllers) {
-                final Class<?> controllerClass = controller.load();
+            List<Class<?>> controllerClasses = AnnotationDetector.scanClassPath("com.home.mvc.servlet")
+                    .forAnnotations(Path.class).collect(Cursor::getType);
+            for (Class<?> controllerClass : controllerClasses) {
                 final Path path = controllerClass.getAnnotation(Path.class);
-                if (path!=null) {
-                    log.debug("mapping url {} to controller {}",path.value(),controllerClass.getSimpleName());
-                    clazzes.put(path.value(), controllerClass);
-                }
+                log.debug("mapping url {} to controller {}", path.value(), controllerClass.getSimpleName());
+                clazzes.put(path.value(), controllerClass);
             }
         } catch (IOException e) {
-            log.error("init failed because"+e.getMessage());
+            e.printStackTrace();
         }
     }
 
