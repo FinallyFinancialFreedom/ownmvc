@@ -5,7 +5,8 @@ import com.home.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 
-import javax.servlet.annotation.WebServlet;
+import javax.ws.rs.POST;
+import javax.ws.rs.Path;
 
 /**
  * Created by liyang on 25/1/2017.
@@ -13,12 +14,14 @@ import javax.servlet.annotation.WebServlet;
  * email to me
  */
 @Slf4j
-@WebServlet(urlPatterns = {"/reg/"})
+@Path(value="/reg/")
 public class RegisterController {
 
     @Autowired
     private UserService userService;
 
+    @POST
+    @Path(value = "add")
     public String add(String tel,int age) {
         return tel+"--"+(++age);
     }

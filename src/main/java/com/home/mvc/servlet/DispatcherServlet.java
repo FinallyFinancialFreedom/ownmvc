@@ -11,15 +11,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.context.support.WebApplicationContextUtils;
 
-import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import javax.ws.rs.*;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -47,12 +47,10 @@ public class DispatcherServlet extends HttpServlet {
             final ImmutableSet<ClassPath.ClassInfo> controllers = classPath.getTopLevelClassesRecursive("com.home.mvc.servlet");
             for (ClassPath.ClassInfo controller : controllers) {
                 final Class<?> controllerClass = controller.load();
-                final WebServlet webUrl = controllerClass.getAnnotation(WebServlet.class);
-                if (webUrl!=null) {
-                    log.debug("mapping url {} to controller {}",webUrl.urlPatterns(),controllerClass.getSimpleName());
-                    for (String url : webUrl.urlPatterns()) {
-                        clazzes.put(url, controllerClass);
-                    }
+                final Path path = controllerClass.getAnnotation(Path.class);
+                if (path!=null) {
+                    log.debug("mapping url {} to controller {}",path.value(),controllerClass.getSimpleName());
+                    clazzes.put(path.value(), controllerClass);
                 }
             }
         } catch (IOException e) {
@@ -68,7 +66,7 @@ public class DispatcherServlet extends HttpServlet {
         String uri = req.getRequestURI();
         final String[] controllerUriAndMethod = splitStruct(uri);
         final Class controller = clazzes.get(controllerUriAndMethod[0]);
-        Method method = getMethod(controllerUriAndMethod[1], controller);
+        Method method = getMethod(controllerUriAndMethod[1], controller,req.getMethod());
 		if(method==null){
             getPrint(resp).print(uri+" is not find!");
             return;
@@ -79,7 +77,7 @@ public class DispatcherServlet extends HttpServlet {
 			Object result = method.invoke(getInstance(controller), args);
 			if(result instanceof View){//to some jsp display
 				req.getRequestDispatcher(result.toString()).forward(req, resp);
-//				resp.sendRedirect(result.toString());这样的话，set的attribute得不到。
+//				resp.sendRedirect(result.toString());
 			}else{//pattern Result or String, Result.toString is invoked by default;
 				getPrint(resp).print(result);
 			}
@@ -138,8 +136,8 @@ public class DispatcherServlet extends HttpServlet {
 			resp.setContentType("text/html; charset=GB2312");
 			resp.setCharacterEncoding("GB2312");
             return resp.getWriter();
-		} catch (IOException e) { 
-			e.printStackTrace(); 
+		} catch (IOException e) {
+			e.printStackTrace();
 			return null;
 		}
 	}
@@ -239,16 +237,16 @@ public class DispatcherServlet extends HttpServlet {
 //	}
 
 	/**
-	 * 只反射public方法。排除doGet和doPost以防引起死循环,找到的方法放在对象field里便于下次使用
-	 * struts1的dispatchaction,做了synchronized,但我认为这里不用，顶多就是开始时多反射几次而已，其后就完全没必要synchronized。
+     * no need to synchronized like struts1
 	 */
-	private Method getMethod(String methodName,Class clazz) {
+	private Method getMethod(String methodName,Class clazz,String httpMethod) {
         String methodKey = clazz.getSimpleName()+"#"+methodName;
         Method m = methods.get(methodKey);
         if(m==null){
             Method[] all= clazz.getMethods();
             for(Method mx :all){
-                if(mx.getName().equals(methodName)&&Modifier.isPublic(mx.getModifiers())){
+                mx.isAnnotationPresent(getAnnoFromRequestMethod(httpMethod));
+                if(mx.getName().equals(methodName)){
                     m = mx;
                 }
             }
@@ -258,7 +256,20 @@ public class DispatcherServlet extends HttpServlet {
         }
         return m;
 	}
-	
+
+    private Class<? extends Annotation> getAnnoFromRequestMethod(String httpMethod) {
+        Class<? extends Annotation> methodAnno;
+        switch (httpMethod) {
+            case HttpMethod.GET:methodAnno = GET.class;break;
+            case HttpMethod.POST:methodAnno = POST.class;break;
+            case HttpMethod.DELETE:methodAnno = DELETE.class;break;
+            case HttpMethod.PUT:methodAnno= PUT.class;break;
+            case HttpMethod.HEAD:methodAnno= HEAD.class;break;
+            case HttpMethod.OPTIONS:methodAnno= OPTIONS.class;break;
+            default:methodAnno=GET.class;break;
+        }
+        return methodAnno;
+    }
 
     /**
      * @param request request
@@ -346,10 +357,8 @@ public class DispatcherServlet extends HttpServlet {
 
 
 //    /**
-//     * 首字母大写加set
 //     */
 //    private static String createSetMethodName(String fieldName) {
 //        return "set"+Character.toUpperCase(fieldName.charAt(0))+fieldName.substring(1);
 //    }
-	
 }
