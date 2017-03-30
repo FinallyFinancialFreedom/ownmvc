@@ -62,11 +62,11 @@ public class DispatcherServlet extends HttpServlet {
         }
     }
 
-	public void doGet(HttpServletRequest req,HttpServletResponse resp){
-		this.doPost(req, resp);
-	}
+    public void doGet(HttpServletRequest req,HttpServletResponse resp){
+        this.doPost(req, resp);
+    }
 
-	public void doPost(HttpServletRequest req,HttpServletResponse resp){
+    public void doPost(HttpServletRequest req,HttpServletResponse resp){
         String uri = req.getRequestURI();
         Method method = urlToMethod.get(uri);
 
@@ -88,19 +88,19 @@ public class DispatcherServlet extends HttpServlet {
             return;
         }
 
-		try {
+        try {
             Object[] args = getArgumentsJDK8(req,method);
             Object result = method.invoke(getInstance(method.getDeclaringClass()), args);
             if(result instanceof View){//to some jsp display
-				req.getRequestDispatcher(result.toString()).forward(req, resp);
-//				resp.sendRedirect(result.toString());
-			}else{//pattern Result or String, Result.toString is invoked by default;
-				getPrint(resp).print(result);
-			}
-		} catch (Exception e) {
+                req.getRequestDispatcher(result.toString()).forward(req, resp);
+//                resp.sendRedirect(result.toString());
+            }else{//pattern Result or String, Result.toString is invoked by default;
+                getPrint(resp).print(result);
+            }
+        } catch (Exception e) {
             getPrint(resp).print(e.getMessage());
-		}
-	}
+        }
+    }
 
     /**
      * cache controller instance, means singleton.
@@ -126,23 +126,21 @@ public class DispatcherServlet extends HttpServlet {
     }
 
     protected PrintWriter getPrint(HttpServletResponse resp){
-		try {
-			resp.setContentType("text/html; charset=GB2312");
-			resp.setCharacterEncoding("GB2312");
+        try {
+            resp.setContentType("text/html; charset=GB2312");
+            resp.setCharacterEncoding("GB2312");
             return resp.getWriter();
-		} catch (IOException e) {
-			e.printStackTrace();
-			return null;
-		}
-	}
+        } catch (IOException e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
 
     /**
      * this method use new api since jdk 1.8 to identify parameter,don't forget to compile with -parameters.
-	 * composite method arguments, arguments can be divide to some situation:
-     * because i can not get parameter names by default.
      * TODO::add enum type
-	 */
-	private Object[] getArgumentsJDK8(HttpServletRequest req,Method method) throws Exception {
+     */
+    private Object[] getArgumentsJDK8(HttpServletRequest req,Method method) throws Exception {
         final Parameter[] parameters = method.getParameters();
         Object[] args = new Object[parameters.length];
         for (int i=0;i<parameters.length;i++) {
@@ -187,8 +185,8 @@ public class DispatcherServlet extends HttpServlet {
                 args[i] = Byte.valueOf(value);
             }
         }
-		return args;
-	}
+        return args;
+    }
 
     private Class getBoxClass(String primitive) {
         Class box;
@@ -206,29 +204,29 @@ public class DispatcherServlet extends HttpServlet {
         return box;
     }
 
-//	/**
+//    /**
 //     * this method use annotation to identify parameter
-//	 * composite method arguments, arguments can be divide to some situation:
-//	 * 1.only a POJO form,this kind of args has no annotation.
+//     * composite method arguments, arguments can be divide to some situation:
+//     * 1.only a POJO form,this kind of args has no annotation.
 //     * 2.some basic type like String,Long,Integer,BigDecimal,Double,Float. this args should has annotation
 //     * because i can not get parameter names by default.
-//	 * @return
-//	 */
-//	protected Object[] getArgumentsJDK7(HttpServletRequest req,Method method){
-//		Class<?>[] parameterTypes = method.getParameterTypes();
+//     * @return
+//     */
+//    protected Object[] getArgumentsJDK7(HttpServletRequest req,Method method){
+//        Class<?>[] parameterTypes = method.getParameterTypes();
 //        final Annotation[][] parameterAnnotations = method.getParameterAnnotations();
-//		Object[] args = new Object[parameterTypes.length];
-//		args[0]=req;
-//		for(int i=1;i<parameterTypes.length;i++){
-//			Class paraType = parameterTypes[i];
-//			if(String.class==paraType){
-//				args[i] =
-//			}else if{
-//				;
-//			}
-//		}
-//		return args;
-//	}
+//        Object[] args = new Object[parameterTypes.length];
+//        args[0]=req;
+//        for(int i=1;i<parameterTypes.length;i++){
+//            Class paraType = parameterTypes[i];
+//            if(String.class==paraType){
+//                args[i] =
+//            }else if{
+//                ;
+//            }
+//        }
+//        return args;
+//    }
 
     /**
      * @param request request
